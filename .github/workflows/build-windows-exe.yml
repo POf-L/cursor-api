@@ -51,6 +51,14 @@ jobs:
         Write-Host "Node version: $(node --version)"
         Write-Host "NPM version: $(npm --version)"
 
+    - name: 安装 Node.js 依赖 (用于压缩)
+      run: |
+        Write-Host "Installing Node.js dependencies in scripts directory..."
+        cd scripts
+        npm install
+        cd ..
+        Write-Host "Node.js dependencies installed."
+
     - name: 构建动态链接版本
       if: github.event.inputs.static_linking != 'true'
       run: |
