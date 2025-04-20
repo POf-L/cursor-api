@@ -13,15 +13,22 @@ jobs:
   build-windows:
     name: 构建Windows可执行文件
     runs-on: windows-latest
-    
+
     steps:
     - name: 检出代码
       uses: actions/checkout@v4.2.2
 
-    - name: 安装Rust
-      uses: dtolnay/rust-toolchain@stable
+    - name: 安装Rust (nightly)
+      uses: dtolnay/rust-toolchain@nightly
       with:
         targets: x86_64-pc-windows-msvc
+        default: true
+    
+    - name: 验证Rust工具链
+      run: |
+        rustc --version
+        cargo --version
+        Write-Host "Current Rust channel: $(rustc -Vv | Select-String -Pattern "release: " -CaseSensitive | ForEach-Object { $_.Line })"
 
     - name: 安装依赖
       run: |
@@ -36,35 +43,95 @@ jobs:
         echo "OPENSSL_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
         echo "PKG_CONFIG_PATH=C:\Program Files\OpenSSL\lib\pkgconfig" >> $env:GITHUB_ENV
 
+        # 检查必要工具是否安装成功
+        Write-Host "Checking installed tools:"
+        Write-Host "Rust version: $(rustc --version)"
+        Write-Host "Cargo version: $(cargo --version)"
+        Write-Host "Protoc version: $(protoc --version)"
+        Write-Host "Node version: $(node --version)"
+        Write-Host "NPM version: $(npm --version)"
+
     - name: 构建动态链接版本
       if: github.event.inputs.static_linking != 'true'
       run: |
         # 创建release目录
-        mkdir -p release
-        
+        New-Item -ItemType Directory -Force -Path release | Out-Null
+
         # 设置环境变量
         $env:RUSTFLAGS = "-C link-arg=-s"
-        
+
+        # 检查Cargo.toml
+        Write-Host "Cargo.toml content:"
+        Get-Content Cargo.toml | Select-Object -First 20
+
         # 构建
-        cargo build --target x86_64-pc-windows-msvc --release
+        Write-Host "Starting build process..."
+        Write-Host "Current Rust channel: $(rustc -Vv | Select-String -Pattern "release: " -CaseSensitive | ForEach-Object { $_.Line })"
         
-        # 复制构建产物
-        Copy-Item "target/x86_64-pc-windows-msvc/release/cursor-api.exe" "release/cursor-api-x86_64-pc-windows-msvc.exe"
+        # 输出最终使用的环境变量
+        Write-Host "RUSTFLAGS: $env:RUSTFLAGS"
+        
+        # 使用+nightly标志明确指定使用nightly版本
+        cargo +nightly build --target x86_64-pc-windows-msvc --release
+
+        # 检查构建产物
+        Write-Host "Checking build artifacts:"
+        if (Test-Path "target/x86_64-pc-windows-msvc/release/cursor-api.exe") {
+            Write-Host "Build artifact found!"
+            # 复制构建产物
+            Copy-Item "target/x86_64-pc-windows-msvc/release/cursor-api.exe" "release/cursor-api-x86_64-pc-windows-msvc.exe"
+            Write-Host "Copied to release directory."
+        } else {
+            Write-Host "Build artifact not found. Checking directory content:"
+            Get-ChildItem -Path "target" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*.exe" }
+            exit 1
+        }
 
     - name: 构建静态链接版本
       if: github.event.inputs.static_linking == 'true' || github.event.inputs.static_linking == ''
       run: |
         # 创建release目录
-        mkdir -p release
-        
+        New-Item -ItemType Directory -Force -Path release | Out-Null
+
         # 设置环境变量
         $env:RUSTFLAGS = "-C target-feature=+crt-static -C link-arg=-s"
-        
+
+        # 检查Cargo.toml
+        Write-Host "Cargo.toml content:"
+        Get-Content Cargo.toml | Select-Object -First 20
+
+        # 修改Cargo.toml中的不稳定特性
+        Write-Host "Modifying Cargo.toml to remove unstable features..."
+        $content = Get-Content Cargo.toml -Raw
+        $content = $content -replace "cargo-features\s*=\s*\[.*?\].*?\r?\n", ""
+        $content = $content -replace "trim-paths\s*=\s*\"all\".*?\r?\n", ""
+        $content = $content -replace "rustflags\s*=\s*\[.*?\].*?\r?\n", ""
+        Write-Host "Modified Cargo.toml content:"
+        $content | Select-Object -First 60
+        Set-Content -Path Cargo.toml -Value $content
+
         # 构建
-        cargo build --target x86_64-pc-windows-msvc --release
+        Write-Host "Starting build process..."
+        Write-Host "Current Rust channel: $(rustc -Vv | Select-String -Pattern "release: " -CaseSensitive | ForEach-Object { $_.Line })"
         
-        # 复制构建产物
-        Copy-Item "target/x86_64-pc-windows-msvc/release/cursor-api.exe" "release/cursor-api-static-x86_64-pc-windows-msvc.exe"
+        # 输出最终使用的环境变量
+        Write-Host "RUSTFLAGS: $env:RUSTFLAGS"
+        
+        # 使用+nightly标志明确指定使用nightly版本
+        cargo +nightly build --target x86_64-pc-windows-msvc --release
+
+        # 检查构建产物
+        Write-Host "Checking build artifacts:"
+        if (Test-Path "target/x86_64-pc-windows-msvc/release/cursor-api.exe") {
+            Write-Host "Build artifact found!"
+            # 复制构建产物
+            Copy-Item "target/x86_64-pc-windows-msvc/release/cursor-api.exe" "release/cursor-api-static-x86_64-pc-windows-msvc.exe"
+            Write-Host "Copied to release directory."
+        } else {
+            Write-Host "Build artifact not found. Checking directory content:"
+            Get-ChildItem -Path "target" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*.exe" }
+            exit 1
+        }
 
     - name: 上传构建产物
       uses: actions/upload-artifact@v4.5.0
