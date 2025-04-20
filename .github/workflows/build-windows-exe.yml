@@ -1,0 +1,74 @@
+name: 构建Windows可执行文件
+
+on:
+  workflow_dispatch:
+    inputs:
+      static_linking:
+        description: '使用静态链接（独立可执行文件）'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  build-windows:
+    name: 构建Windows可执行文件
+    runs-on: windows-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4.2.2
+
+    - name: 安装Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-pc-windows-msvc
+
+    - name: 安装依赖
+      run: |
+        choco install -y protoc
+        choco install -y openssl
+        choco install -y nodejs-lts
+
+        # 刷新环境变量
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+        # 设置 OpenSSL 环境变量
+        echo "OPENSSL_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
+        echo "PKG_CONFIG_PATH=C:\Program Files\OpenSSL\lib\pkgconfig" >> $env:GITHUB_ENV
+
+    - name: 构建动态链接版本
+      if: github.event.inputs.static_linking != 'true'
+      run: |
+        # 创建release目录
+        mkdir -p release
+        
+        # 设置环境变量
+        $env:RUSTFLAGS = "-C link-arg=-s"
+        
+        # 构建
+        cargo build --target x86_64-pc-windows-msvc --release
+        
+        # 复制构建产物
+        Copy-Item "target/x86_64-pc-windows-msvc/release/cursor-api.exe" "release/cursor-api-x86_64-pc-windows-msvc.exe"
+
+    - name: 构建静态链接版本
+      if: github.event.inputs.static_linking == 'true' || github.event.inputs.static_linking == ''
+      run: |
+        # 创建release目录
+        mkdir -p release
+        
+        # 设置环境变量
+        $env:RUSTFLAGS = "-C target-feature=+crt-static -C link-arg=-s"
+        
+        # 构建
+        cargo build --target x86_64-pc-windows-msvc --release
+        
+        # 复制构建产物
+        Copy-Item "target/x86_64-pc-windows-msvc/release/cursor-api.exe" "release/cursor-api-static-x86_64-pc-windows-msvc.exe"
+
+    - name: 上传构建产物
+      uses: actions/upload-artifact@v4.5.0
+      with:
+        name: cursor-api-windows-exe
+        path: release/*.exe
+        retention-days: 7
