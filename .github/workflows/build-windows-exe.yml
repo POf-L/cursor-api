@@ -22,7 +22,6 @@ jobs:
       uses: dtolnay/rust-toolchain@nightly
       with:
         targets: x86_64-pc-windows-msvc
-        default: true
     
     - name: 验证Rust工具链
       run: |
