@@ -60,9 +60,25 @@ jobs:
         # 设置环境变量
         $env:RUSTFLAGS = "-C link-arg=-s"
 
-        # 检查Cargo.toml
-        Write-Host "Cargo.toml content:"
-        Get-Content Cargo.toml | Select-Object -First 20
+        # 修改Cargo.toml中的不稳定特性 - 使用过滤方法
+        Write-Host "Creating new Cargo.toml without unstable features..."
+        
+        # 读取Cargo.toml并过滤掉不稳定特性行
+        $lines = Get-Content -Path Cargo.toml
+        $filteredLines = $lines | Where-Object {
+            -not ($_ -match 'cargo-features\s*=' -or
+                 $_ -match 'trim-paths\s*=\s*"all"' -or
+                 $_ -match 'rustflags\s*=\s*\[')
+        }
+        
+        # 输出调试信息
+        Write-Host "Original line count: $($lines.Count)"
+        Write-Host "Filtered line count: $($filteredLines.Count)"
+        Write-Host "First 20 lines of filtered content:"
+        $filteredLines | Select-Object -First 20
+        
+        # 写入修改后的文件
+        $filteredLines | Set-Content -Path Cargo.toml
 
         # 构建
         Write-Host "Starting build process..."
@@ -96,19 +112,25 @@ jobs:
         # 设置环境变量
         $env:RUSTFLAGS = "-C target-feature=+crt-static -C link-arg=-s"
 
-        # 检查Cargo.toml
-        Write-Host "Cargo.toml content:"
-        Get-Content Cargo.toml | Select-Object -First 20
-
-        # 修改Cargo.toml中的不稳定特性
-        Write-Host "Modifying Cargo.toml to remove unstable features..."
-        $content = Get-Content Cargo.toml -Raw
-        $content = $content -replace "cargo-features\s*=\s*\[.*?\].*?\r?\n", ""
-        $content = $content -replace "trim-paths\s*=\s*\"all\".*?\r?\n", ""
-        $content = $content -replace "rustflags\s*=\s*\[.*?\].*?\r?\n", ""
-        Write-Host "Modified Cargo.toml content:"
-        $content | Select-Object -First 60
-        Set-Content -Path Cargo.toml -Value $content
+        # 修改Cargo.toml中的不稳定特性 - 使用过滤方法
+        Write-Host "Creating new Cargo.toml without unstable features..."
+        
+        # 读取Cargo.toml并过滤掉不稳定特性行
+        $lines = Get-Content -Path Cargo.toml
+        $filteredLines = $lines | Where-Object {
+            -not ($_ -match 'cargo-features\s*=' -or
+                 $_ -match 'trim-paths\s*=\s*"all"' -or
+                 $_ -match 'rustflags\s*=\s*\[')
+        }
+        
+        # 输出调试信息
+        Write-Host "Original line count: $($lines.Count)"
+        Write-Host "Filtered line count: $($filteredLines.Count)"
+        Write-Host "First 20 lines of filtered content:"
+        $filteredLines | Select-Object -First 20
+        
+        # 写入修改后的文件
+        $filteredLines | Set-Content -Path Cargo.toml
 
         # 构建
         Write-Host "Starting build process..."
